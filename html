@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <!-- Tailwind CSS for styling -->
+    <script src="<URL>"></script>
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="<URL>">
+    
+    <style>
+        /* Custom styles */
+        body { font-family: 'Arial', sans-serif; }
+        .loader { border-top-color: #3498db; -webkit-animation: spin 1s linear infinite; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        /* Style for combobox */
+        .combobox-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="app" class="p-4 md:p-8 max-w-7xl mx-auto">
+        
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">מערכת ניהול שדות</h1>
+            <div id="user-info" class="text-right"></div>
+        </header>
+
+        <!-- Navigation -->
+        <nav id="main-nav" class="mb-4">
+            <!-- Admin navigation will be inserted here -->
+        </nav>
+
+        <!-- Main Content Area -->
+        <main id="content-area">
+            <!-- Views will be rendered here -->
+        </main>
+
+        <!-- Loader -->
+        <div id="loader" class="hidden fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+            <div class="loader ease-linear rounded-full border-8 border-t-8 border-gray-200 h-32 w-32"></div>
+        </div>
+
+        <!-- Add/Edit Record Modal -->
+        <div id="record-modal" class="hidden fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-40">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl">
+                <h2 id="modal-title" class="text-2xl font-bold mb-4">הוספת רשומה חדשה</h2>
+                <form id="record-form">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="brand" class="block text-sm font-medium text-gray-700">Brand</label>
+                            <select id="brand" name="brand" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                                <option value="gpro">GPro</option>
+                                <option value="glite">GLite</option>
+                                <option value="gfh">HFG</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="domain" class="block text-sm font-medium text-gray-700">Domain</label>
+                            <input type="text" id="domain" name="domain" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                        </div>
+                        <div>
+                            <label for="main_category" class="block text-sm font-medium text-gray-700">Main Category</label>
+                            <input type="text" id="main_category" name="main_category" list="main-categories-list" class="combobox-input mt-1">
+                            <datalist id="main-categories-list"></datalist>
+                        </div>
+                        <div>
+                            <label for="sub_category" class="block text-sm font-medium text-gray-700">Sub Category</label>
+                            <input type="text" id="sub_category" name="sub_category" list="sub-categories-list" class="combobox-input mt-1">
+                            <datalist id="sub-categories-list"></datalist>
+                        </div>
+                        <div class="md:col-span-2">
+                             <label for="custom_text_1" class="block text-sm font-medium text-gray-700">Custom Text 1</label>
+                            <input type="text" id="custom_text_1" name="custom_text_1" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                        </div>
+                         <div class="md:col-span-2">
+                             <label for="custom_text_2" class="block text-sm font-medium text-gray-700">Custom Text 2</label>
+                            <input type="text" id="custom_text_2" name="custom_text_2" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                        </div>
+                         <div class="md:col-span-2 bg-gray-100 p-2 rounded">
+                             <label class="block text-sm font-medium text-gray-700">Multi-Level Category (Preview)</label>
+                             <p id="multi-level-preview" class="text-gray-600 mt-1">-</p>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-4">
+                        <button type="button" id="cancel-modal-btn" class="py-2 px-4 bg-gray-300 rounded-md">ביטול</button>
+                        <button type="submit" class="py-2 px-4 bg-blue-600 text-white rounded-md">שמירה</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // =================================================================
+        // GLOBAL STATE
+        // =================================================================
+        let currentUser = null;
+        let currentRecords = [];
+        let currentView = 'dashboard';
+        
+        // =================================================================
+        // INITIALIZATION
+        // =================================================================
+        document.addEventListener('DOMContentLoaded', () => {
+            showLoader();
+            <URL>
+                .withSuccessHandler(onDataLoaded)
+                .withFailureHandler(showError)
+                .getDashboardData('All');
+
+            setupEventListeners();
+        });
+
+        function onDataLoaded(data) {
+            currentUser = data.user;
+            currentRecords = data.records;
+            
+            renderUserInfo();
+            renderDashboard();
+            updateComboboxes(data.uniqueValues);
+            
+            if (currentUser.role === 'Admin') {
+                renderAdminNav();
+            }
+            hideLoader();
+        }
+
+        function setupEventListeners() {
+            // Modal listeners
+            document.getElementById('cancel-modal-btn').addEventListener('click', hideModal);
+            document.getElementById('record-form').addEventListener('submit', handleFormSubmit);
+            
+            // Real-time preview for multi-level category
+            ['domain', 'main_category', 'sub_category'].forEach(id => {
+                document.getElementById(id).addEventListener('input', updateMultiLevelPreview);
+            });
+        }
+
+        // =================================================================
+        // RENDERING FUNCTIONS
+        // =================================================================
+        function renderUserInfo() {
+            const userInfoDiv = document.getElementById('user-info');
+            userInfoDiv.innerHTML = `
+                <p class="font-semibold">${<URL>}</p>
+                <p class="text-sm text-gray-600">תפקיד: ${currentUser.role}</p>
+            `;
+        }
+        
+        function renderAdminNav() {
+            const nav = document.getElementById('main-nav');
+            nav.innerHTML = `
+                <div class="flex space-x-4 border-b pb-2">
+                    <button onclick="renderDashboard()" class="px-3 py-1 rounded ${currentView === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-gray-200'}">Dashboard</button>
+                    <button onclick="renderAdminSettings()" class="px-3 py-1 rounded ${currentView === 'admin' ? 'bg-blue-600 text-white' : 'bg-gray-200'}">Admin Settings</button>
+                </div>
+            `;
+        }
+
+        function renderDashboard() {
+            currentView = 'dashboard';
+            const contentArea = document.getElementById('content-area');
+            contentArea.innerHTML = `
+                <div class="flex justify-between items-center mb-4">
+                    <div id="brand-tabs" class="flex space-x-1 border border-gray-300 rounded-lg p-1">
+                        <button class="brand-tab active" onclick="filterByBrand('All', this)">הכל</button>
+                        <button class="brand-tab" onclick="filterByBrand('gpro', this)">GPro</button>
+                        <button class="brand-tab" onclick="filterByBrand('glite', this)">GLite</button>
+                        <button class="brand-tab" onclick="filterByBrand('gfh', this)">HFG</button>
+                    </div>
+                    <button id="add-record-btn" class="bg-blue-600 text-white px-4 py-2 rounded-md shadow hover:bg-blue-700">
+                        <i class="fas fa-plus mr-2"></i>הוסף רשומה
+                    </button>
+                </div>
+                <div class="bg-white shadow-md rounded-lg overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Multi-Level Category</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Owner</th>
+                                ${currentUser.role === 'Admin' ? '<th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Tag Value</th>' : ''}
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">פעולות</th>
+                            </tr>
+                        </thead>
+                        <tbody id="records-table-body" class="bg-white divide-y divide-gray-200">
+                            <!-- Rows will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            renderTable(currentRecords);
+            document.getElementById('add-record-btn').addEventListener('click', showAddModal);
+        }
+        
+        function renderTable(records) {
+            const tableBody = document.getElementById('records-table-body');
+            if (!tableBody) return;
+            
+            if (records.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-gray-500">לא נמצאו רשומות</td></tr>';
+                return;
+            }
+
+            tableBody.innerHTML = <URL>(record => `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap">${record.Brand.toUpperCase()}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${record['Multi-Level Category']}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${record.Owner}</td>
+                    ${currentUser.role === 'Admin' ? `<td class="px-6 py-4 whitespace-nowrap font-mono text-xs">${record['Multi-Level Tag']}</td>` : ''}
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button onclick="handleDelete(${<URL>})" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderAdminSettings() {
+             currentView = 'admin';
+             const contentArea = document.getElementById('content-area');
+             contentArea.innerHTML = `
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-xl font-bold mb-4">הגדרות מערכת (אדמין)</h2>
+                    <div class="space-y-6">
+                        <div>
+                            <h3 class="font-semibold">Google Sheets Integration</h3>
+                            <div class="mt-2 space-y-2">
+                                <div>
+                                    <label for="sheet1-url">Sheet 1 URL</label>
+                                    <input type="url" id="sheet1-url" class="w-full p-2 border rounded mt-1">
+                                </div>
+                                <div>
+                                    <label for="sheet2-url">Sheet 2 URL</label>
+                                    <input type="url" id="sheet2-url" class="w-full p-2 border rounded mt-1">
+                                </div>
+                                <button onclick="saveSheetUrls()" class="bg-green-600 text-white px-4 py-2 rounded">שמור כתובות</button>
+                            </div>
+                        </div>
+                        <hr>
+                        <div>
+                            <h3 class="font-semibold">HTTP Requests Log</h3>
+                            <p class="text-gray-600">תצוגת לוגים תופיע כאן.</p>
+                        </div>
+                    </div>
+                </div>
+             `;
+             // כאן צריך לקרוא לפונקציה שתביא את ההגדרות הנוכחיות ותציג אותן
+        }
+
+        // =================================================================
+        // EVENT HANDLERS & ACTIONS
+        // =================================================================
+        function filterByBrand(brand, element) {
+            document.querySelectorAll('.brand-tab').forEach(tab => tab.classList.remove('active'));
+            element.classList.add('active');
+            
+            const filteredRecords = brand === 'All' ? currentRecords : currentRecords.filter(r => r.Brand === brand);
+            renderTable(filteredRecords);
+        }
+
+        function showAddModal() {
+            document.getElementById('modal-title').innerText = 'הוספת רשומה חדשה';
+            document.getElementById('record-form').reset();
+            updateMultiLevelPreview();
+            showModal();
+        }
+
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            showLoader();
+            const formData = new FormData(<URL>);
+            const recordObject = Object.fromEntries(formData.entries());
+            
+            <URL>
+                .withSuccessHandler(res => {
+                    showAlert(res.message);
+                    if (res.success) {
+                        hideModal();
+                        <URL>.withSuccessHandler(onDataLoaded).getDashboardData('All');
+                    } else {
+                        hideLoader();
+                    }
+                })
+                .withFailureHandler(showError)
+                .addOrUpdateRecord(recordObject);
+        }
+        
+        function handleDelete(recordId) {
+            if (confirm('האם אתה בטוח שברצונך למחוק רשומה זו?')) {
+                showLoader();
+                <URL>
+                    .withSuccessHandler(res => {
+                        showAlert(res.message);
+                        if(res.success) {
+                            <URL>.withSuccessHandler(onDataLoaded).getDashboardData('All');
+                        } else {
+                            hideLoader();
+                        }
+                    })
+                    .withFailureHandler(showError)
+                    .deleteRecord(recordId);
+            }
+        }
+        
+        function saveSheetUrls() {
+            const urls = {
+                sheet1: document.getElementById('sheet1-url').value,
+                sheet2: document.getElementById('sheet2-url').value
+            };
+            showLoader();
+            <URL>.withSuccessHandler(res => {
+                hideLoader();
+                showAlert(res.message);
+            }).withFailureHandler(showError).saveSheetsUrls(urls);
+        }
+
+        // =================================================================
+        // UTILITY FUNCTIONS
+        // =================================================================
+        function showLoader() { document.getElementById('loader').classList.remove('hidden'); }
+        function hideLoader() { document.getElementById('loader').classList.add('hidden'); }
+        function showModal() { document.getElementById('record-modal').classList.remove('hidden'); }
+        function hideModal() { document.getElementById('record-modal').classList.add('hidden'); }
+        function showError(error) { hideLoader(); alert('Error: ' + error.message); }
+        function showAlert(message) { alert(message); }
+
+        function updateComboboxes(uniqueValues) {
+            const mainList = document.getElementById('main-categories-list');
+            const subList = document.getElementById('sub-categories-list');
+            mainList.innerHTML = <URL>(v => `<option value="${v}"></option>`).join('');
+            subList.innerHTML = <URL>(v => `<option value="${v}"></option>`).join('');
+        }
+        
+        function updateMultiLevelPreview() {
+            const domain = document.getElementById('domain').value;
+            const mainCat = document.getElementById('main_category').value;
+            const subCat = document.getElementById('sub_category').value;
+            const previewP = document.getElementById('multi-level-preview');
+            
+            if (domain || mainCat || subCat) {
+                previewP.textContent = `${domain || ''}:: ${mainCat || ''}:: ${subCat || ''}`;
+            } else {
+                previewP.textContent = '-';
+            }
+        }
+
+        // Add active class to brand tabs
+        const style = document.createElement('style');
+        style.innerHTML = `.brand-tab { padding: 8px 16px; border-radius: 6px; cursor: pointer; } .brand-tab.active { background-color: #2563eb; color: white; }`;
+        document.head.appendChild(style);
+
+    </script>
+</body>
+</html>
